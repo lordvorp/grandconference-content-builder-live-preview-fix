@@ -1,0 +1,167 @@
+diff -ruN a/functions/theme_script.js b/functions/theme_script.js
+--- a/functions/theme_script.js	2026-10-25 05:20:26.408657535 -0700
++++ b/functions/theme_script.js	2026-10-25 05:20:26.417839972 -0700
+@@ -1613,6 +1613,101 @@
+ 		showLoading();
+ 	});
+ 	
++	jQuery('#ppb_preview_page').on( 'click', function(){
++		//If not in live mode
++		if(!isLiveMode())
++		{
++			jQuery(window).unbind('beforeunload');
++			
++			//Save all content
++			ppbSaveAll();
++		
++			//Get current data string
++			var dataString = ppbGetDataString();
++			var dataSizeString = ppbGetDataSizeString();
++		    
++		    var itemOrder = jQuery("#content_builder_sort").sortable('toArray');
++		    jQuery('#ppb_form_data_order').attr('value', itemOrder);
++		    
++		    //Temporary call AJAX to save current content builder data
++		    jQuery.fancybox.showLoading();
++			var actionURL = jQuery(this).data('action');
++			var previewURL = jQuery(this).data('preview');
++			var pageID = jQuery(this).data('page');
++			var fancyboxMargin = 32;
++			
++			jQuery.ajax({
++		      type: "POST",
++		      cache: false,
++		      url: actionURL,
++			  data: 'page_id='+pageID+'&data_order='+jQuery('#ppb_form_data_order').val()+dataString+dataSizeString,
++		      success: function (data) {
++		        	jQuery.ajax({
++				      type: "GET",
++				      cache: false,
++				      url: previewURL,
++				      data: 'rel='+pageID,
++				      success: function (data) {
++				        jQuery.fancybox(data, {
++				          fitToView: false,
++				          width: 1024,
++				          minHeight: '100%',
++				          margin: fancyboxMargin,
++				          autoSize: false,
++				          autoResize: true,
++				          autoHeight: true,
++				          closeClick: false,
++				          openEffect: 'none',
++				          closeEffect: 'none',
++				          helpers : {
++						    	overlay : {
++						            css : {
++						                'background-color' : 'rgba(0, 0, 0, 0.2)'
++						            }
++						        }
++						   },
++				          padding: 0
++				        }); 
++				      } 
++				    });
++		      } 
++		    });
++		} 
++		//If in live mode
++		else {
++			jQuery(this).toggleClass('active');
++			jQuery('#content_builder_classic_wrapper').toggleClass('hide');
++			jQuery('#ppb_live_preview_frame_wrapper').toggleClass('expand');
++			parent.triggerResize();
++		}
++	    
++	    return false;
++	});
++	
++	jQuery('#ppb_preview_devices a.ppb_device').on('click', function(){
++		if(!jQuery(this).hasClass('active'))
++		{
++			jQuery('#ppb_preview_devices a.ppb_device').removeClass('active');
++			jQuery(this).addClass('active');
++			
++			var selectedDevice = jQuery(this).data('preview');
++			jQuery('#ppb_live_preview_frame_wrapper').attr('rel', selectedDevice);
++			
++			if(jQuery(window).height() > 1080 && selectedDevice == 'ppb_preview_tablet')
++			{
++				jQuery('#ppb_live_preview_frame_wrapper').css('margin-top', 'auto');
++				jQuery('#ppb_live_preview_frame_wrapper').vercenter();
++			}
++			else
++			{
++				jQuery('#ppb_live_preview_frame_wrapper').css('margin-top', 'auto');
++			}
++			
++			//Reload preview frame
++			ppbReloadPreview();
++		}
++	});
++	
+ 	jQuery('#ppb_page_title_header').on('mouseenter', function(){
+ 		jQuery('#ppb_page_option_wrapper').addClass('expand');
+ 	});
+@@ -1970,6 +2065,7 @@
+ 		jQuery('#ppb_live_preview_frame').removeClass('live');
+ 		jQuery('#ppb_live_preview_frame').attr('src', '');
+ 		
++		jQuery('#ppb_preview_page').removeClass('active');
+ 		jQuery('#content_builder_classic_wrapper').removeClass('hide');
+ 		jQuery('#ppb_live_preview_frame_wrapper').removeClass('expand');
+ 	});
+diff -ruN a/modules/content_builder.php b/modules/content_builder.php
+--- a/modules/content_builder.php	2026-10-25 05:20:26.411926401 -0700
++++ b/modules/content_builder.php	2026-10-25 05:20:26.420840058 -0700
+@@ -67,6 +67,8 @@
+ 				
+ 				<a id="ppb_open_templates" href="#ppb_template" class="pp_fancybox_inline"><?php esc_html_e('Templates', 'grandconference' ); ?></a>
+ 				
++				<a id="ppb_preview_page" data-action="<?php echo esc_url(admin_url('admin-ajax.php?action=grandconference_ppb_preview_page_set_data')); ?>" data-preview="<?php echo esc_url(admin_url('admin-ajax.php?action=grandconference_ppb_preview_page&ppb_post_type=page&page_id='.$post->ID)); ?>" data-page="<?php echo esc_attr($post->ID); ?>"><?php esc_html_e('Preview', 'grandconference' ); ?></a>
++				
+ 				<div id="ppb_preview_devices">
+ 					<a id="ppb_desktop" class="ppb_device active" href="javascript:;" data-preview="ppb_preview_desktop"><span class="dashicons dashicons-desktop"></span></a>
+ 					
+@@ -329,6 +331,24 @@
+ 	</div>
+ 	<!-- End classic content builder wrapper -->
+ 	
++	<!-- Begin live preview frame -->
++	<?php
++		//get preview URL
++		$preview_url = get_permalink($post->ID);
++		$url_parts = parse_url($preview_url, PHP_URL_QUERY);
++		
++		// Returns a string if the URL has parameters or NULL if not
++		if ($url_parts) {
++		    $preview_url.= '&ppb_preview_page=true&ppb_live=true';
++		} else {
++		    $preview_url.= '?ppb_preview_page=true&ppb_live=true';
++		}
++	?>
++	<div id="ppb_live_preview_frame_wrapper" rel="ppb_preview_desktop">
++		<iframe id="ppb_live_preview_frame" data-action="<?php echo esc_url(admin_url('admin-ajax.php?action=grandconference_ppb_preview_page_set_data')); ?>" data-preview="<?php echo esc_url($preview_url); ?>"></iframe>
++	</div>
++	<!-- End live preview frame -->
++	
+ 	</div>
+ <?php
+ 
+diff -ruN a/page.php b/page.php
+--- a/page.php	2026-10-25 05:20:26.414839886 -0700
++++ b/page.php	2026-10-25 05:20:26.424498599 -0700
+@@ -19,6 +19,13 @@
+ 	die;
+ }
+ 
++//Check if content builder preview page
++if(isset($_GET['ppb_preview_page']))
++{
++	get_template_part("page-preview-page");
++	die;
++}
++
+ /**
+ *	Get Current page object
+ **/
